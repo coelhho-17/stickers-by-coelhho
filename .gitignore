@@ -1,0 +1,16 @@
+# Build output
+build/
+*.apk
+*.aab
+
+# Keystores (nunca commitar)
+debug.keystore
+*.keystore
+*.jks
+
+# IDE
+.idea/
+*.iml
+
+# Stray/scratch files
+test.png
