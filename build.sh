@@ -51,25 +51,29 @@ cd "$OUT"
 jar uf app.unsigned.apk classes.dex
 cd ..
 
-echo "==> 6/6 zipalign + assinatura"
+echo "==> 6/6 zipalign + assinatura (release)"
 "$ZIPALIGN" -f 4 "$OUT/app.unsigned.apk" "$OUT/app.aligned.apk"
 
-if [ ! -f debug.keystore ]; then
-  keytool -genkeypair \
-    -keystore debug.keystore \
-    -storepass android \
-    -keypass android \
-    -alias androiddebugkey \
-    -dname "CN=Android Debug,O=Android,C=US" \
-    -keyalg RSA \
-    -keysize 2048 \
-    -validity 10000
+if [ ! -f release.keystore ]; then
+  echo "ERRO: release.keystore não encontrado."
+  echo "Ele NÃO é versionado. Gere com:"
+  echo "  keytool -genkeypair -keystore release.keystore -alias stickers -keyalg RSA -keysize 2048 -validity 36500"
+  exit 1
 fi
 
+if [ ! -f keystore.properties ]; then
+  echo "ERRO: keystore.properties não encontrado (guarda a senha do keystore; não versionar)."
+  exit 1
+fi
+
+# senhas/alias do keystore.properties (gitignored)
+. ./keystore.properties
+
 java -jar "$BT/lib/apksigner.jar" sign \
-  --ks debug.keystore \
-  --ks-pass pass:android \
-  --key-pass pass:android \
+  --ks release.keystore \
+  --ks-pass "pass:$storePassword" \
+  --key-pass "pass:$keyPassword" \
+  --ks-key-alias "$keyAlias" \
   --out "$OUT/StickerLimpo.apk" \
   "$OUT/app.aligned.apk"
 

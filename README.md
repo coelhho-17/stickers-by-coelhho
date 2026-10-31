@@ -1,41 +1,45 @@
 # Stickers by coelhho
 
-App Android para criar figurinhas (stickers) do WhatsApp **sem o contorno branco** que o criador nativo aplica. Sem anúncios e sem trackers — uma versão limpa.
+Android app to create WhatsApp stickers **without the white outline** that the native maker adds. No ads, no trackers — a clean rebuild.
 
-## O que faz
+> [Leia em português](README.pt.md)
 
-- Escolhe uma imagem da galeria (ou recebe via compartilhar / intent `SEND`).
-- Borracha manual para apagar o fundo (alpha transparente).
-- Gera WebP 512x512 com transparência e entrega direto ao WhatsApp via pacote de figurinhas — sem passar pelo editor nativo, que é o que adiciona o contorno branco automático.
+## What it does
 
-## Build (sem Gradle)
+- Pick an image from the gallery (or receive it via the share sheet / `SEND` intent).
+- Manual eraser to remove the background (transparent alpha).
+- Generates a 512x512 WebP with transparency and delivers it straight to WhatsApp as a sticker pack — bypassing WhatsApp's native editor, which is what adds the automatic white outline.
 
-Requisitos:
+## Build (no Gradle)
+
+Requirements:
 
 - JDK 21
-- Android SDK (build-tools 35.0.0 e platforms/android-34)
+- Android SDK (build-tools 35.0.0 and platforms/android-34)
 - `bash` (Git Bash / MSYS)
 
 ```bash
 bash build.sh
 ```
 
-APK gerado em `build/StickerLimpo.apk`, assinado com keystore de debug gerado automaticamente (não versionado).
+The APK is written to `build/StickerLimpo.apk`, signed with the release keystore (`release.keystore` — **not** committed).
 
-## Estrutura
+> Release signing: `build.sh` reads the keystore path, alias and passwords from `keystore.properties` (git-ignored). Keep **both** `release.keystore` and `keystore.properties` backed up — losing them means you can no longer ship updates with the same signature.
 
-- `src/com/coelhho/sticker/` — código (`MainActivity`, `StickerContentProvider`, `EraseView`)
-- `res/` — recursos e ícone adaptativo
-- `build.sh` — build sem Gradle (aapt2 + javac + d8 + apksigner)
-- `tools/gen_icons.py` — gera os ícones (adaptativo + fallback por densidade)
+## Project layout
 
-## Notas técnicas
+- `src/com/coelhho/sticker/` — source (`MainActivity`, `StickerContentProvider`, `EraseView`)
+- `res/` — resources and adaptive icon
+- `build.sh` — Gradle-free build (aapt2 + javac + d8 + apksigner)
+- `tools/gen_icons.py` — regenerates the app icons (adaptive + per-density fallback)
 
-Descobertas de engenharia reversa do WhatsApp (v2.26.x) que viabilizam a importação de figurinhas de um app pessoal:
+## Technical notes
 
-1. **Ownership check**: a intent `ENABLE_STICKER_PACK` precisa ser disparada via `startActivityForResult` a partir da própria activity do app (não `startActivity`, não shell), e o pacote chamador precisa ser o dono da authority do `ContentProvider`. Caso contrário o WhatsApp fecha silenciosamente em ~7ms.
-2. **Limite de tamanho**: sticker estático é limitado a ~100 KB (103.423 bytes). `WEBP_LOSSLESS` estoura fácil em imagem detalhada; usa-se `WEBP_LOSSY` (que preserva alpha) com redução de qualidade até caber.
+Reverse-engineering findings about WhatsApp (v2.26.x) that make third-party sticker import possible:
 
-## Licença
+1. **Ownership check**: the `ENABLE_STICKER_PACK` intent must be fired via `startActivityForResult` from the app's own activity (not `startActivity`, not the shell), and the calling package must own the `ContentProvider` authority. Otherwise WhatsApp closes silently in ~7 ms.
+2. **Size limit**: static stickers are capped at ~100 KB (103,423 bytes). `WEBP_LOSSLESS` blows past that on detailed images; use `WEBP_LOSSY` (which keeps alpha) and lower the quality until it fits.
 
-MIT — veja [LICENSE](LICENSE).
+## License
+
+MIT — see [LICENSE](LICENSE).

@@ -5,8 +5,10 @@ build/
 
 # Keystores (nunca commitar)
 debug.keystore
+release.keystore
 *.keystore
 *.jks
+keystore.properties
 
 # IDE
 .idea/
