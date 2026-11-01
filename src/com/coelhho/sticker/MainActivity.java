@@ -14,6 +14,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -38,6 +39,7 @@ public class MainActivity extends Activity {
     private static final int REQ_PICK = 1;
 
     private EraseView eraseView;
+    private EditText nameInput;
     private Button eraseButton;
     private boolean eraseOn = false;
 
@@ -68,6 +70,12 @@ public class MainActivity extends Activity {
         title.setGravity(Gravity.CENTER);
         title.setPadding(0, 0, 0, dp(10));
         root.addView(title);
+
+        nameInput = new EditText(this);
+        nameInput.setHint("Nome da figurinha (opcional)");
+        nameInput.setSingleLine(true);
+        root.addView(nameInput, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         eraseView = new EraseView(this);
         LinearLayout.LayoutParams cvLp = new LinearLayout.LayoutParams(
@@ -221,7 +229,10 @@ public class MainActivity extends Activity {
         Bitmap sticker = eraseView.getBitmap();
 
         String identifier = "pack_" + System.currentTimeMillis();
-        String packName = "Sticker " + (System.currentTimeMillis() / 1000);
+        String custom = nameInput.getText().toString().trim();
+        String packName = custom.isEmpty()
+                ? "Sticker " + (System.currentTimeMillis() / 1000)
+                : custom;
 
         File packsDir = new File(getFilesDir(), "packs");
         if (!packsDir.exists() && !packsDir.mkdirs()) {
