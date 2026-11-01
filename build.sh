@@ -36,6 +36,9 @@ javac -source 8 -target 8 \
   "$OUT/gen/$PKG_PATH/R.java" \
   "src/$PKG_PATH/StickerContentProvider.java" \
   "src/$PKG_PATH/EraseView.java" \
+  "src/$PKG_PATH/GifDecoder.java" \
+  "src/$PKG_PATH/StaticWebpParser.java" \
+  "src/$PKG_PATH/AnimatedWebpMuxer.java" \
   "src/$PKG_PATH/MainActivity.java"
 
 echo "==> 4/6 d8 (bytecode -> classes.dex)"

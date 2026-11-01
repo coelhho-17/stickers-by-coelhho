@@ -41,24 +41,28 @@ public class EraseView extends View {
         erasePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
     }
 
-    public void setImage(Bitmap src) {
-        if (src == null) return;
+    /** Ajusta (fit) a imagem num quadrado size×size preservando a proporção,
+     *  centralizada com fundo transparente. Estático e sem efeito colateral. */
+    public static Bitmap fitBitmap(Bitmap src, int size) {
         int sw = src.getWidth();
         int sh = src.getHeight();
-        if (sw <= 0 || sh <= 0) return;
-
-        // Mantém o formato original (fit com fundo transparente, sem cortar):
-        // escala a imagem inteira para caber em 512x512 preservando a proporção
-        // e centraliza. O arquivo continua 512x512 (exigência do WhatsApp), mas
-        // a figurinha visível fica retangular, com margens transparentes.
-        bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888);
-        bitmapCanvas = new Canvas(bitmap);
-        float scale = Math.min(512f / sw, 512f / sh);
+        if (sw <= 0 || sh <= 0) return null;
+        Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(out);
+        float scale = Math.min((float) size / sw, (float) size / sh);
         int dw = Math.round(sw * scale);
         int dh = Math.round(sh * scale);
-        int dx = (512 - dw) / 2;
-        int dy = (512 - dh) / 2;
-        bitmapCanvas.drawBitmap(src, null, new RectF(dx, dy, dx + dw, dy + dh), null);
+        int dx = (size - dw) / 2;
+        int dy = (size - dh) / 2;
+        c.drawBitmap(src, null, new RectF(dx, dy, dx + dw, dy + dh), null);
+        return out;
+    }
+
+    public void setImage(Bitmap src) {
+        if (src == null) return;
+        bitmap = fitBitmap(src, 512);
+        if (bitmap == null) return;
+        bitmapCanvas = new Canvas(bitmap);
         invalidate();
     }
 

@@ -28,6 +28,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * App minimalista: escolhe imagem -> (opcional) apaga fundo -> exporta como
@@ -42,6 +44,7 @@ public class MainActivity extends Activity {
     private EditText nameInput;
     private Button eraseButton;
     private boolean eraseOn = false;
+    private List<GifDecoder.Frame> gifFrames; // null = imagem estática
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -183,34 +186,70 @@ public class MainActivity extends Activity {
     }
 
     private void loadImage(Uri uri) {
-        BitmapFactory.Options bounds = new BitmapFactory.Options();
-        bounds.inJustDecodeBounds = true;
-        try (InputStream in = openImageStream(uri)) {
-            BitmapFactory.decodeStream(in, null, bounds);
-        } catch (Exception e) {
-            android.util.Log.e(TAG, "loadImage bounds failed", e);
+        byte[] bytes = readBytes(uri);
+        if (bytes == null || bytes.length == 0) {
             toast("Erro ao abrir a imagem");
             return;
         }
 
+        if (isGif(bytes)) {
+            try {
+                List<GifDecoder.Frame> frames = GifDecoder.decode(bytes);
+                if (frames.size() > 1) {
+                    gifFrames = frames;
+                    Bitmap first = Bitmap.createBitmap(
+                            frames.get(0).argb, frames.get(0).width, frames.get(0).height,
+                            Bitmap.Config.ARGB_8888);
+                    eraseView.setImage(first);
+                    eraseView.setEraseMode(false);
+                    eraseOn = false;
+                    eraseButton.setEnabled(false);
+                    eraseButton.setText("Borracha (GIF)");
+                    return;
+                }
+            } catch (Exception e) {
+                android.util.Log.w(TAG, "GIF decode falhou; tratando como estático", e);
+            }
+        }
+
+        gifFrames = null;
+        eraseButton.setEnabled(true);
+        eraseButton.setText("Borracha");
+        decodeStatic(bytes);
+    }
+
+    private byte[] readBytes(Uri uri) {
+        try (InputStream in = openImageStream(uri)) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int r;
+            while ((r = in.read(buf)) > 0) baos.write(buf, 0, r);
+            return baos.toByteArray();
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "readBytes failed", e);
+            return null;
+        }
+    }
+
+    private boolean isGif(byte[] b) {
+        return b.length >= 6 && b[0] == 'G' && b[1] == 'I' && b[2] == 'F' && b[3] == '8';
+    }
+
+    private void decodeStatic(byte[] bytes) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
         int sample = 1;
         while (bounds.outWidth / sample > 1024 || bounds.outHeight / sample > 1024) {
             sample *= 2;
         }
-
         BitmapFactory.Options opts = new BitmapFactory.Options();
         opts.inSampleSize = sample;
-        try (InputStream in = openImageStream(uri)) {
-            Bitmap bmp = BitmapFactory.decodeStream(in, null, opts);
-            if (bmp != null) {
-                eraseView.setImage(bmp);
-            } else {
-                android.util.Log.e(TAG, "loadImage: decodeStream returned null");
-                toast("Não foi possível ler a imagem");
-            }
-        } catch (Exception e) {
-            android.util.Log.e(TAG, "loadImage decode failed", e);
-            toast("Erro ao abrir a imagem");
+        Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, opts);
+        if (bmp != null) {
+            eraseView.setImage(bmp);
+        } else {
+            toast("Não foi possível ler a imagem");
         }
     }
 
@@ -222,11 +261,11 @@ public class MainActivity extends Activity {
     }
 
     private void addToWhatsApp() {
-        if (!eraseView.hasImage()) {
+        boolean hasImage = (gifFrames != null) || eraseView.hasImage();
+        if (!hasImage) {
             toast("Escolha uma imagem primeiro");
             return;
         }
-        Bitmap sticker = eraseView.getBitmap();
 
         String identifier = "pack_" + System.currentTimeMillis();
         String custom = nameInput.getText().toString().trim();
@@ -249,10 +288,28 @@ public class MainActivity extends Activity {
         String trayName = "tray.png";
 
         try {
-            // 1) WebP com alpha (evita o contorno branco). O WhatsApp limita sticker
-            //    ESTÁTICO a ~100 KB; WEBP_LOSSLESS estoura fácil em imagem detalhada.
-            //    WEBP_LOSSY preserva alpha e fica bem menor. Reduz qualidade até caber.
-            byte[] webp = encodeWebpUnderLimit(sticker);
+            byte[] webp;
+            Bitmap traySource;
+            boolean animated;
+            if (gifFrames != null) {
+                webp = encodeAnimatedWebpUnderLimit(gifFrames);
+                if (webp.length == 0) {
+                    toast("Não foi possível animar este GIF");
+                    return;
+                }
+                Bitmap first = Bitmap.createBitmap(
+                        gifFrames.get(0).argb, gifFrames.get(0).width, gifFrames.get(0).height,
+                        Bitmap.Config.ARGB_8888);
+                traySource = EraseView.fitBitmap(first, 512);
+                animated = true;
+            } else {
+                Bitmap sticker = eraseView.getBitmap();
+                webp = encodeWebpUnderLimit(sticker);
+                traySource = sticker;
+                animated = false;
+            }
+
+            // 1) WebP (estático ou animado) com alpha — evita o contorno branco
             try (FileOutputStream fos = new FileOutputStream(new File(packDir, webpName))) {
                 fos.write(webp);
             }
@@ -261,14 +318,14 @@ public class MainActivity extends Activity {
             Bitmap tray = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
             Canvas trayCanvas = new Canvas(tray);
             trayCanvas.drawColor(Color.WHITE);
-            trayCanvas.drawBitmap(sticker, null, new RectF(0, 0, 96, 96), null);
+            trayCanvas.drawBitmap(traySource, null, new RectF(0, 0, 96, 96), null);
             try (FileOutputStream fos = new FileOutputStream(new File(packDir, trayName))) {
                 tray.compress(Bitmap.CompressFormat.PNG, 100, fos);
             }
             tray.recycle();
 
             // 3) contents.json (acumula os pacotes já criados)
-            writeContentsJson(identifier, packName, webpName, trayName);
+            writeContentsJson(identifier, packName, webpName, trayName, animated);
 
             // 4) Intent padrão de importação do WhatsApp
             Intent intent = new Intent("com.whatsapp.intent.action.ENABLE_STICKER_PACK");
@@ -299,8 +356,47 @@ public class MainActivity extends Activity {
         return baos.toByteArray();
     }
 
+    // Codifica GIF animado como WebP animado respeitando os limites do WhatsApp
+    // p/ figurinha ANIMADA: <= ~500 KB e <= 10s. Reduz qualidade e corta frames.
+    private byte[] encodeAnimatedWebpUnderLimit(List<GifDecoder.Frame> frames) {
+        int limit = 480 * 1024; // folga sob o teto real de ~500 KB
+        for (int q = 90; q >= 30; q -= 10) {
+            byte[] out = encodeAnimated(frames, q);
+            if (out != null && out.length <= limit) return out;
+        }
+        byte[] out = encodeAnimated(frames, 20);
+        return (out != null) ? out : new byte[0];
+    }
+
+    private byte[] encodeAnimated(List<GifDecoder.Frame> frames, int quality) {
+        List<AnimatedWebpMuxer.Frame> muxFrames = new ArrayList<>();
+        int total = 0;
+        for (GifDecoder.Frame gf : frames) {
+            int dur = Math.max(20, gf.delayMs); // mínimo 20ms
+            if (total + dur > 10000) break;     // estoura 10s -> corta o resto
+            total += dur;
+
+            Bitmap bmp = Bitmap.createBitmap(gf.argb, gf.width, gf.height, Bitmap.Config.ARGB_8888);
+            Bitmap fitted = EraseView.fitBitmap(bmp, 512);
+            if (fitted == null) return null;
+            byte[] webp = compressLossy(fitted, quality);
+            StaticWebpParser.Result r = StaticWebpParser.parse(webp);
+            muxFrames.add(new AnimatedWebpMuxer.Frame(r.payload, r.alph, r.lossless, 512, 512, dur));
+            fitted.recycle();
+            bmp.recycle();
+        }
+        if (muxFrames.isEmpty()) return null;
+        return AnimatedWebpMuxer.mux(muxFrames, 512, 512, 0);
+    }
+
+    private byte[] compressLossy(Bitmap bmp, int quality) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, quality, baos);
+        return baos.toByteArray();
+    }
+
     private void writeContentsJson(String identifier, String packName,
-                                   String webpName, String trayName) throws Exception {
+                                   String webpName, String trayName, boolean animated) throws Exception {
         File contentsFile = new File(getFilesDir(), "packs/contents.json");
 
         JSONObject root = new JSONObject();
@@ -335,7 +431,7 @@ public class MainActivity extends Activity {
         pack.put("license_agreement_website", "");
         pack.put("image_data_version", "1");
         pack.put("avoid_cache", false);
-        pack.put("animated_sticker_pack", false);
+        pack.put("animated_sticker_pack", animated);
 
         JSONArray stickers = new JSONArray();
         JSONObject s = new JSONObject();
