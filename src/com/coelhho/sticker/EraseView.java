@@ -13,8 +13,9 @@ import android.view.MotionEvent;
 import android.view.View;
 
 /**
- * Canvas quadrado 512x512. Mostra a imagem centralizada (center-crop) e,
- * em modo borracha, apaga o fundo pintando com alpha transparente.
+ * Canvas 512x512 (exigência do WhatsApp). Mostra a imagem inteira ajustada
+ * (fit) preservando a proporção, centralizada com fundo transparente. Em modo
+ * borracha, apaga o fundo pintando com alpha transparente.
  */
 public class EraseView extends View {
 
@@ -44,16 +45,20 @@ public class EraseView extends View {
         if (src == null) return;
         int sw = src.getWidth();
         int sh = src.getHeight();
-        int size = Math.min(sw, sh);
-        if (size <= 0) return;
-        int x = (sw - size) / 2;
-        int y = (sh - size) / 2;
-        Bitmap cropped = Bitmap.createBitmap(src, x, y, size, size);
+        if (sw <= 0 || sh <= 0) return;
 
+        // Mantém o formato original (fit com fundo transparente, sem cortar):
+        // escala a imagem inteira para caber em 512x512 preservando a proporção
+        // e centraliza. O arquivo continua 512x512 (exigência do WhatsApp), mas
+        // a figurinha visível fica retangular, com margens transparentes.
         bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888);
         bitmapCanvas = new Canvas(bitmap);
-        bitmapCanvas.drawBitmap(cropped, null, new RectF(0, 0, 512, 512), null);
-        if (cropped != src) cropped.recycle();
+        float scale = Math.min(512f / sw, 512f / sh);
+        int dw = Math.round(sw * scale);
+        int dh = Math.round(sh * scale);
+        int dx = (512 - dw) / 2;
+        int dy = (512 - dh) / 2;
+        bitmapCanvas.drawBitmap(src, null, new RectF(dx, dy, dx + dw, dy + dh), null);
         invalidate();
     }
 
